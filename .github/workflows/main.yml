@@ -1,64 +1,31 @@
-name: Tieba Daily Sign-In
+name: Start
 
 on:
   push:
   gollum:
   schedule:
     - cron: '30 */12 * * *'
-  workflow_dispatch:
-    inputs:
-      test_mode:
-        description: 'Run in test mode?'
-        required: true
-        default: 'false'
-        type: choice
-        options:
-        - 'true'
-        - 'false'
-      bduss_override:
-        description: 'Override BDUSS (optional for test mode)'
-        required: false
-        type: string
+  workflow_dispatch:  # 添加手动触发
 
 jobs:
-  tieba-daily-sign-in:  # Corrected job ID
+  TiebaSignIn:
     runs-on: ubuntu-latest
     steps:
-    - name: Checkout Code
-      uses: actions/checkout@v2
-    - name: Set up JDK 8
-      uses: actions/setup-java@v3
-      with:
-        java-version: '8'
-        distribution: 'temurin'
-    - name: Cache Maven Dependencies
-      uses: actions/cache@v2
-      with:
-        path: ~/.m2/repository
-        key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
-        restore-keys: |
-          ${{ runner.os }}-maven-
-    - name: Check Environment Variables (Non-Test Mode)
-      if: github.event.inputs.test_mode != 'true' && ( env.BDUSS == '' || env.SCKEY == '' )
-      run: |
-        echo "Error: BDUSS or SCKEY is not set."
-        exit 1
-    - name: Set BDUSS
-      run: |
-        if [ "${{ github.event.inputs.test_mode }}" == "true" ]; then
-          echo "BDUSS=${{ github.event.inputs.bduss_override || env.BDUSS }}" >> $GITHUB_ENV
-        else
-          echo "BDUSS=${{ env.BDUSS }}" >> $GITHUB_ENV
-        fi
-    - name: Set SCKEY
-      run: |
-          echo "SCKEY=${{ env.SCKEY }}" >> $GITHUB_ENV
-    - name: Run Tieba Sign-In
-      id: tieba-sign-in
-      run: |
-        mvn compile exec:java -Dexec.mainClass="top.srcrs.Run" -Dexec.args="${{ env.BDUSS }} ${{ env.SCKEY }}" || exit 1
-
-    - name: Check Sign-In Status
-      if: steps.tieba-sign-in.outcome != 'success'
-      run: |
-        echo "Tieba Sign-In Failed! Consider sending a notification using SCKEY here."
+      - uses: actions/checkout@v2
+      - name: Set up JDK 1.8
+        uses: actions/setup-java@v1
+        with:
+          java-version: 1.8
+      - name: Cache local Maven repository
+        uses: actions/cache@v2
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
+      - name: Build with Maven
+        env:
+          BDUSS: ${{ secrets.BDUSS }}
+          SCKEY: ${{ secrets.SCKEY }}
+        run: |
+          mvn compile exec:java -Dexec.mainClass="top.srcrs.Run" -Dexec.args="${BDUSS} ${SCKEY}"
