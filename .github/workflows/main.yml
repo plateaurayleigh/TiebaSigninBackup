@@ -1,34 +1,66 @@
-# 每12小时执行一次
-
-name: Start
+name: Tieba Daily Sign-In
 
 on:
-   push:
-   gollum:
-   schedule:
-       - cron: '30 */12 * * *'
+  push:
+  gollum:
+  schedule:
+    - cron: '30 */12 * * *'
+  workflow_dispatch:
+    inputs:
+      test_mode:
+        description: 'Run in test mode?'
+        required: true
+        default: 'false'
+        type: choice
+        options:
+        - 'true'
+        - 'false'
+      bduss_override:
+        description: 'Override BDUSS (optional for test mode)'
+        required: false
+        type: string
+
 
 jobs:
-  TiebaSignIn:
-
+  Tieba每日签到:
     runs-on: ubuntu-latest
-
     steps:
-    - uses: actions/checkout@v2
-    - name: Set up JDK 1.8
-      uses: actions/setup-java@v1
+    - name: 检出代码库
+      uses: actions/checkout@v2
+    - name: 设置 JDK 8
+      uses: actions/setup-java@v3
       with:
-        java-version: 1.8
-    - name: Cache local Maven repository
+        java-version: '8'
+        distribution: 'temurin'
+    - name: 缓存 Maven 依赖项
       uses: actions/cache@v2
       with:
         path: ~/.m2/repository
         key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
         restore-keys: |
           ${{ runner.os }}-maven-
-    - name: Build with Maven
-      env:
-        BDUSS: ${{ secrets.BDUSS }}
-        SCKEY: ${{ secrets.SCKEY }}
+    - name: 检查环境变量 (非测试模式)
+      if: github.event.inputs.test_mode != 'true' && ( env.BDUSS == '' || env.SCKEY == '' )
       run: |
-        mvn compile exec:java -Dexec.mainClass="top.srcrs.Run" -Dexec.args="${BDUSS} ${SCKEY}"
+        echo "错误：未设置 BDUSS 或 SCKEY。"
+        exit 1
+    - name: 设置 BDUSS
+      run: |
+        if [ "${{ github.event.inputs.test_mode }}" == "true" ]; then
+          echo "BDUSS=${{ github.event.inputs.bduss_override || env.BDUSS }}" >> $GITHUB_ENV
+        else
+          echo "BDUSS=${{ env.BDUSS }}" >> $GITHUB_ENV
+        fi
+    - name: 设置 SCKEY
+      run: |
+          echo "SCKEY=${{ env.SCKEY }}" >> $GITHUB_ENV #SCKEY Shouldn't be overridden.
+
+    - name: 运行贴吧签到
+      id: tieba-sign-in
+      run: |
+        mvn compile exec:java -Dexec.mainClass="top.srcrs.Run" -Dexec.args="${{ env.BDUSS }} ${{ env.SCKEY }}" || exit 1
+
+    - name: 检查签到状态
+      if: steps.tieba-sign-in.outcome != 'success'
+      run: |
+        echo "贴吧签到失败！考虑在此处使用 SCKEY 发送通知。"
